@@ -14,6 +14,7 @@ class SecretService {
   constructor(context) {
     this.context = context;
     this.secretPrefix = 'querypilot.connection.';
+    this.aiSecretPrefix = 'querypilot.ai.';
   }
 
   /**
@@ -178,6 +179,71 @@ class SecretService {
    */
   _getSecretKey(connectionId) {
     return `${this.secretPrefix}${connectionId}`;
+  }
+
+  /**
+   * Save AI API key securely
+   * @param {string} provider - AI provider name (e.g., 'groq', 'gemini')
+   * @param {string} apiKey - API key to store
+   * @returns {Promise<void>}
+   */
+  async saveAIKey(provider, apiKey) {
+    try {
+      if (!provider || !apiKey) {
+        throw new Error('Provider and API key are required');
+      }
+
+      const secretKey = this._getAISecretKey(provider);
+      await this.context.secrets.store(secretKey, apiKey);
+    } catch (error) {
+      throw new Error(`Failed to save AI API key: ${error.message}`);
+    }
+  }
+
+  /**
+   * Retrieve AI API key
+   * @param {string} provider - AI provider name (e.g., 'groq', 'gemini')
+   * @returns {Promise<string|null>} API key or null if not found
+   */
+  async getAIKey(provider) {
+    try {
+      const secretKey = this._getAISecretKey(provider);
+      const apiKey = await this.context.secrets.get(secretKey);
+      return apiKey;
+    } catch (error) {
+      throw new Error(`Failed to retrieve AI API key: ${error.message}`);
+    }
+  }
+
+  /**
+   * Delete AI API key
+   * @param {string} provider - AI provider name (e.g., 'groq', 'gemini')
+   * @returns {Promise<boolean>} true if key was deleted, false if not found
+   */
+  async deleteAIKey(provider) {
+    try {
+      const secretKey = this._getAISecretKey(provider);
+      const apiKey = await this.context.secrets.get(secretKey);
+
+      if (!apiKey) {
+        return false;
+      }
+
+      await this.context.secrets.delete(secretKey);
+      return true;
+    } catch (error) {
+      throw new Error(`Failed to delete AI API key: ${error.message}`);
+    }
+  }
+
+  /**
+   * Internal method to generate AI secret storage key
+   * @param {string} provider - AI provider name
+   * @returns {string} Secret storage key
+   * @private
+   */
+  _getAISecretKey(provider) {
+    return `${this.aiSecretPrefix}${provider.toLowerCase()}`;
   }
 }
 

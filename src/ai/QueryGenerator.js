@@ -5,11 +5,11 @@
  * SQL queries. It receives the database schema as context to ensure generated
  * queries reference actual tables and columns. The AI layer is designed to be
  * provider-agnostic so the LLM provider can be changed later.
- * 
- * Note: This is a placeholder implementation. An actual AI provider needs to be
- * integrated to generate real queries. The architecture supports easy integration
- * of different AI providers (OpenAI, Anthropic, etc.).
  */
+
+const BaseAIProvider = require('./BaseAIProvider');
+const GroqProvider = require('./GroqProvider');
+const GeminiProvider = require('./GeminiProvider');
 
 class QueryGenerator {
   /**
@@ -24,23 +24,24 @@ class QueryGenerator {
 
   /**
    * Configure the AI provider
-   * @param {string} provider - AI provider name ('openai', 'anthropic', etc.)
+   * @param {string} provider - AI provider name ('groq', 'gemini', etc.)
    * @param {Object} providerConfig - Provider-specific configuration
+   * @param {string} providerConfig.apiKey - API key for the provider
+   * @param {string} providerConfig.model - Model name (optional, uses default if not provided)
    * @returns {Promise<void>}
    */
   async configure(provider, providerConfig) {
     try {
-      // Future implementation: Initialize specific AI provider
-      // switch (provider) {
-      //   case 'openai':
-      //     this.aiProvider = new OpenAIProvider(providerConfig);
-      //     break;
-      //   case 'anthropic':
-      //     this.aiProvider = new AnthropicProvider(providerConfig);
-      //     break;
-      //   default:
-      //     throw new Error(`Unsupported AI provider: ${provider}`);
-      // }
+      switch (provider.toLowerCase()) {
+        case 'groq':
+          this.aiProvider = new GroqProvider(providerConfig);
+          break;
+        case 'gemini':
+          this.aiProvider = new GeminiProvider(providerConfig);
+          break;
+        default:
+          throw new Error(`Unsupported AI provider: ${provider}. Supported providers: groq, gemini`);
+      }
       
       this.isConfigured = true;
     } catch (error) {
@@ -63,19 +64,23 @@ class QueryGenerator {
 
     try {
       // If AI is configured, use it
-      if (this.isConfigured) {
+      if (this.isConfigured && this.aiProvider) {
         const schemaContext = this._buildSchemaContext(schema, databaseType);
         const prompt = this._buildPrompt(userPrompt, schemaContext, databaseType);
         
-        // Future: Call AI provider
-        // const generatedQuery = await this.aiProvider.generate(prompt);
-        // return {
-        //   query: generatedQuery,
-        //   confidence: 0.95,
-        //   explanation: 'Generated query description',
-        //   tablesUsed: ['users'],
-        //   columnsUsed: ['id', 'name', 'email', 'created_at']
-        // };
+        const generatedQuery = await this.aiProvider.generate(prompt);
+        
+        // Extract tables and columns used from the generated query
+        const tablesUsed = this._extractTableNames(generatedQuery);
+        const columnsUsed = this._extractColumnNames(generatedQuery);
+        
+        return {
+          query: generatedQuery,
+          confidence: 0.9,
+          explanation: `Generated SQL query using ${this.aiProvider.constructor.name}`,
+          tablesUsed: tablesUsed,
+          columnsUsed: columnsUsed
+        };
       }
 
       // Fallback: Use rule-based generation for basic patterns
@@ -190,6 +195,38 @@ Return only the SQL query, no explanations or additional text.`;
       errors,
       warnings
     };
+  }
+
+  /**
+   * Extract column names from SQL query
+   * @param {string} query - SQL query
+   * @returns {Array<string>} Array of column names
+   * @private
+   */
+  _extractColumnNames(query) {
+    const columns = [];
+    const upperQuery = query.toUpperCase();
+
+    // Extract columns from SELECT clause
+    const selectMatch = upperQuery.match(/SELECT\s+(.*?)\s+FROM/i);
+    if (selectMatch) {
+      const selectClause = selectMatch[1].trim();
+      
+      if (selectClause !== '*') {
+        // Split by comma and clean up
+        const columnList = selectClause.split(',').map(col => col.trim());
+        
+        columnList.forEach(col => {
+          // Remove table name prefix if present (e.g., "table.column" -> "column")
+          const cleanCol = col.split('.').pop().trim();
+          // Remove aliases if present (e.g., "column AS alias" -> "column")
+          const withoutAlias = cleanCol.split(/\s+AS\s+/i)[0].trim();
+          columns.push(withoutAlias);
+        });
+      }
+    }
+
+    return columns;
   }
 
   /**

@@ -106,6 +106,12 @@ class SidebarProvider {
         case 'getConnectionStatus':
           await this._handleGetConnectionStatus();
           break;
+        case 'configureAI':
+          await this._handleConfigureAI(message);
+          break;
+        case 'getAIStatus':
+          await this._handleGetAIStatus();
+          break;
         default:
           this._sendError(`Unknown message type: ${message.type}`);
       }
@@ -404,6 +410,52 @@ class SidebarProvider {
   }
 
   /**
+   * Handle configure AI request
+   * @param {Object} message - Configure AI message
+   * @private
+   */
+  async _handleConfigureAI(message) {
+    try {
+      const { provider, apiKey, model } = message.payload;
+
+      // Save API key securely
+      await this.connectionManager.secretService.saveAIKey(provider, apiKey);
+
+      // Configure AI with the API key
+      await this.queryManager.configureAI(provider, { apiKey, model });
+
+      this._sendMessage({
+        type: 'aiConfigured',
+        payload: {
+          provider: provider,
+          model: model
+        }
+      });
+    } catch (error) {
+      this._sendError(`AI configuration failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle get AI status request
+   * @private
+   */
+  async _handleGetAIStatus() {
+    try {
+      const isAIReady = this.queryManager.isAIReady();
+
+      this._sendMessage({
+        type: 'aiStatus',
+        payload: {
+          configured: isAIReady
+        }
+      });
+    } catch (error) {
+      this._sendError(`Failed to get AI status: ${error.message}`);
+    }
+  }
+
+  /**
    * Send message to webview
    * @param {Object} message - Message to send
    * @private
@@ -582,6 +634,33 @@ class SidebarProvider {
         </div>
         
         <div class="section">
+            <h2>AI Configuration</h2>
+            <div id="ai-status" class="status disconnected">AI Not Configured</div>
+            
+            <label for="ai-provider">AI Provider:</label>
+            <select id="ai-provider">
+                <option value="groq">Groq</option>
+                <option value="gemini">Gemini</option>
+            </select>
+            
+            <label for="ai-model">Model:</label>
+            <select id="ai-model">
+                <option value="llama3-70b-8192">Llama 3 70B</option>
+                <option value="llama3-8b-8192">Llama 3 8B</option>
+                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                <option value="gemma-7b-it">Gemma 7B</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-1.0-pro">Gemini 1.0 Pro</option>
+            </select>
+            
+            <label for="ai-api-key">API Key:</label>
+            <input type="password" id="ai-api-key" placeholder="Enter your API key">
+            
+            <button id="configure-ai-btn">Configure AI</button>
+        </div>
+        
+        <div class="section">
             <h2>Natural Language Query</h2>
             <label for="user-prompt">Enter your request:</label>
             <textarea id="user-prompt" rows="3" placeholder="Show me all users who signed up last week"></textarea>
@@ -613,7 +692,9 @@ class SidebarProvider {
         const explainQueryBtn = document.getElementById('explain-query-btn');
         const optimizeQueryBtn = document.getElementById('optimize-query-btn');
         const runQueryBtn = document.getElementById('run-query-btn');
+        const configureAIBtn = document.getElementById('configure-ai-btn');
         const connectionStatus = document.getElementById('connection-status');
+        const aiStatus = document.getElementById('ai-status');
         const schemaDisplay = document.getElementById('schema-display');
         const generatedQueryDisplay = document.getElementById('generated-query');
         const queryResultsDisplay = document.getElementById('query-results');
@@ -629,6 +710,7 @@ class SidebarProvider {
         explainQueryBtn.addEventListener('click', handleExplainQuery);
         optimizeQueryBtn.addEventListener('click', handleOptimizeQuery);
         runQueryBtn.addEventListener('click', handleRunQuery);
+        configureAIBtn.addEventListener('click', handleConfigureAI);
         
         // Handle messages from extension
         window.addEventListener('message', event => {
@@ -658,6 +740,12 @@ class SidebarProvider {
                     break;
                 case 'connectionStatus':
                     handleConnectionStatus(message.payload);
+                    break;
+                case 'aiConfigured':
+                    handleAIConfigured(message.payload);
+                    break;
+                case 'aiStatus':
+                    handleAIStatus(message.payload);
                     break;
                 case 'error':
                     showError(message.payload.error);
@@ -729,6 +817,17 @@ class SidebarProvider {
                     payload: { query: currentQuery }
                 });
             }
+        }
+        
+        function handleConfigureAI() {
+            const provider = document.getElementById('ai-provider').value;
+            const model = document.getElementById('ai-model').value;
+            const apiKey = document.getElementById('ai-api-key').value;
+            
+            vscode.postMessage({
+                type: 'configureAI',
+                payload: { provider, model, apiKey }
+            });
         }
         
         function handleConnectSuccess(payload) {
@@ -815,6 +914,22 @@ class SidebarProvider {
             }
         }
         
+        function handleAIConfigured(payload) {
+            aiStatus.textContent = 'AI Configured: ' + payload.provider + ' (' + payload.model + ')';
+            aiStatus.className = 'status connected';
+            clearError();
+        }
+        
+        function handleAIStatus(payload) {
+            if (payload.configured) {
+                aiStatus.textContent = 'AI Configured';
+                aiStatus.className = 'status connected';
+            } else {
+                aiStatus.textContent = 'AI Not Configured';
+                aiStatus.className = 'status disconnected';
+            }
+        }
+        
         function showError(error) {
             errorContainer.innerHTML = \`<div class="error">\${error}</div>\`;
         }
@@ -825,6 +940,7 @@ class SidebarProvider {
         
         // Request connection status on load
         vscode.postMessage({ type: 'getConnectionStatus' });
+        vscode.postMessage({ type: 'getAIStatus' });
     </script>
 </body>
 </html>`;
