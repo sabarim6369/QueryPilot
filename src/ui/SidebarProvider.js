@@ -229,12 +229,16 @@ class SidebarProvider {
       });
 
       if (result.success) {
+        // Automatically execute the generated query
+        const executionResult = await this.queryManager.executeQuery(adapter, result.query);
+
         this._sendMessage({
           type: 'queryGenerated',
           payload: {
             query: result.query,
             confidence: result.confidence,
-            explanation: result.explanation
+            explanation: result.explanation,
+            executionResult: executionResult.success ? executionResult : null
           }
         });
       } else {
@@ -775,6 +779,13 @@ class SidebarProvider {
             optimizeQueryBtn.disabled = false;
             runQueryBtn.disabled = false;
             clearError();
+
+            // Automatically display execution results if available
+            if (payload.executionResult && payload.executionResult.success) {
+                handleQueryExecuted(payload.executionResult);
+            } else if (payload.executionResult && !payload.executionResult.success) {
+                showError('Query execution failed: ' + payload.executionResult.error);
+            }
         }
         
         function handleQueryExecuted(payload) {

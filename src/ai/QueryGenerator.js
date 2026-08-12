@@ -57,35 +57,29 @@ class QueryGenerator {
    * @returns {Promise<Object>} Generated query result
    */
   async generateQuery({ databaseType, schema, userPrompt }) {
-    if (!this.isConfigured) {
-      throw new Error('AI provider not configured. Please call configure() first.');
-    }
-
     if (!databaseType || !schema || !userPrompt) {
       throw new Error('Missing required parameters: databaseType, schema, and userPrompt');
     }
 
     try {
-      // Build context from schema
-      const schemaContext = this._buildSchemaContext(schema, databaseType);
+      // If AI is configured, use it
+      if (this.isConfigured) {
+        const schemaContext = this._buildSchemaContext(schema, databaseType);
+        const prompt = this._buildPrompt(userPrompt, schemaContext, databaseType);
+        
+        // Future: Call AI provider
+        // const generatedQuery = await this.aiProvider.generate(prompt);
+        // return {
+        //   query: generatedQuery,
+        //   confidence: 0.95,
+        //   explanation: 'Generated query description',
+        //   tablesUsed: ['users'],
+        //   columnsUsed: ['id', 'name', 'email', 'created_at']
+        // };
+      }
 
-      // Build prompt for AI
-      const prompt = this._buildPrompt(userPrompt, schemaContext, databaseType);
-
-      // Future implementation: Call AI provider to generate query
-      // const generatedQuery = await this.aiProvider.generate(prompt);
-      
-      // Placeholder: Return error indicating AI not implemented
-      throw new Error('AI query generation not yet implemented. Please configure an AI provider.');
-      
-      // Future implementation would return:
-      // return {
-      //   query: generatedQuery,
-      //   confidence: 0.95,
-      //   explanation: 'Generated query description',
-      //   tablesUsed: ['users'],
-      //   columnsUsed: ['id', 'name', 'email', 'created_at']
-      // };
+      // Fallback: Use rule-based generation for basic patterns
+      return this._generateWithRules(userPrompt, schema, databaseType);
     } catch (error) {
       throw new Error(`Query generation failed: ${error.message}`);
     }
@@ -224,6 +218,201 @@ Return only the SQL query, no explanations or additional text.`;
     }
 
     return [...new Set(tables)];
+  }
+
+  /**
+   * Generate SQL using rule-based patterns (fallback when AI is not configured)
+   * @param {string} userPrompt - Natural language request
+   * @param {Object} schema - Database schema
+   * @param {string} databaseType - Type of database
+   * @returns {Object} Generated query result
+   * @private
+   */
+  _generateWithRules(userPrompt, schema, databaseType) {
+    const prompt = userPrompt.toLowerCase();
+    
+    // Extract table name from schema
+    const tableName = this._extractTableName(prompt, schema);
+    if (!tableName) {
+      throw new Error('Could not determine which table to query. Please specify a table name in your request.');
+    }
+
+    let query = '';
+    let explanation = '';
+    const columns = this._extractColumns(prompt, schema, tableName);
+
+    // Pattern: "get all [table]" or "show all [table]" or "select all [table]"
+    if (prompt.match(/get all|show all|select all|list all|all \w+/)) {
+      query = `SELECT * FROM ${tableName}`;
+      explanation = `Retrieving all records from ${tableName}`;
+    }
+    // Pattern: "get [table]" or "show [table]" or "select [table]"
+    else if (prompt.match(/get |show |select |list /)) {
+      if (columns.length > 0) {
+        query = `SELECT ${columns.join(', ')} FROM ${tableName}`;
+        explanation = `Retrieving specific columns from ${tableName}`;
+      } else {
+        query = `SELECT * FROM ${tableName}`;
+        explanation = `Retrieving all records from ${tableName}`;
+      }
+    }
+    // Pattern: "count [table]"
+    else if (prompt.match(/count /)) {
+      query = `SELECT COUNT(*) FROM ${tableName}`;
+      explanation = `Counting records in ${tableName}`;
+    }
+    // Default fallback
+    else {
+      query = `SELECT * FROM ${tableName}`;
+      explanation = `Retrieving all records from ${tableName}`;
+    }
+
+    // Add LIMIT clause if specified
+    const limitMatch = prompt.match(/limit (\d+)/);
+    if (limitMatch) {
+      query += ` LIMIT ${limitMatch[1]}`;
+      explanation += ` (limited to ${limitMatch[1]} records)`;
+    }
+
+    // Add ORDER BY if specified
+    if (prompt.includes('order by') || prompt.includes('sort by')) {
+      const orderColumn = this._extractOrderColumn(prompt, schema, tableName);
+      if (orderColumn) {
+        const direction = prompt.includes('desc') ? 'DESC' : 'ASC';
+        query += ` ORDER BY ${orderColumn} ${direction}`;
+        explanation += ` (sorted by ${orderColumn} ${direction})`;
+      }
+    }
+
+    // Add WHERE clause for simple conditions
+    const whereCondition = this._extractWhereCondition(prompt, schema, tableName);
+    if (whereCondition) {
+      query += ` WHERE ${whereCondition}`;
+      explanation += ` (filtered by condition)`;
+    }
+
+    return {
+      query: query,
+      confidence: 0.6,
+      explanation: explanation,
+      tablesUsed: [tableName],
+      columnsUsed: columns.length > 0 ? columns : ['*']
+    };
+  }
+
+  /**
+   * Extract table name from prompt using schema
+   * @param {string} prompt - Lowercase user prompt
+   * @param {Object} schema - Database schema
+   * @returns {string|null} Table name or null
+   * @private
+   */
+  _extractTableName(prompt, schema) {
+    if (!schema.tables || schema.tables.length === 0) {
+      return null;
+    }
+
+    // Try to find table name mentioned in prompt
+    for (const table of schema.tables) {
+      const tableName = table.name.toLowerCase();
+      const fullTableName = `${table.schemaName}.${table.name}`.toLowerCase();
+      
+      if (prompt.includes(tableName) || prompt.includes(fullTableName)) {
+        return fullTableName;
+      }
+    }
+
+    // If no match, return first table
+    const firstTable = schema.tables[0];
+    return `${firstTable.schemaName}.${firstTable.name}`;
+  }
+
+  /**
+   * Extract column names from prompt
+   * @param {string} prompt - Lowercase user prompt
+   * @param {Object} schema - Database schema
+   * @param {string} tableName - Full table name
+   * @returns {Array<string>} Column names
+   * @private
+   */
+  _extractColumns(prompt, schema, tableName) {
+    const table = schema.tables.find(t => 
+      `${t.schemaName}.${t.name}` === tableName || t.name === tableName
+    );
+
+    if (!table || !table.columns) {
+      return [];
+    }
+
+    const mentionedColumns = [];
+    for (const col of table.columns) {
+      if (prompt.includes(col.name.toLowerCase())) {
+        mentionedColumns.push(col.name);
+      }
+    }
+
+    return mentionedColumns;
+  }
+
+  /**
+   * Extract order by column from prompt
+   * @param {string} prompt - Lowercase user prompt
+   * @param {Object} schema - Database schema
+   * @param {string} tableName - Full table name
+   * @returns {string|null} Column name or null
+   * @private
+   */
+  _extractOrderColumn(prompt, schema, tableName) {
+    const table = schema.tables.find(t => 
+      `${t.schemaName}.${t.name}` === tableName || t.name === tableName
+    );
+
+    if (!table || !table.columns) {
+      return null;
+    }
+
+    for (const col of table.columns) {
+      if (prompt.includes(col.name.toLowerCase())) {
+        return col.name;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract WHERE condition from prompt (simple implementation)
+   * @param {string} prompt - Lowercase user prompt
+   * @param {Object} schema - Database schema
+   * @param {string} tableName - Full table name
+   * @returns {string|null} WHERE condition or null
+   * @private
+   */
+  _extractWhereCondition(prompt, schema, tableName) {
+    const table = schema.tables.find(t => 
+      `${t.schemaName}.${t.name}` === tableName || t.name === tableName
+    );
+
+    if (!table || !table.columns) {
+      return null;
+    }
+
+    // Simple pattern: "where column = value"
+    const whereMatch = prompt.match(/where (\w+)\s*=\s*(\w+)/i);
+    if (whereMatch) {
+      const column = whereMatch[1];
+      const value = whereMatch[2];
+      
+      // Check if column exists
+      const colExists = table.columns.some(c => c.name.toLowerCase() === column.toLowerCase());
+      if (colExists) {
+        // Add quotes for string values
+        const isNumeric = !isNaN(value);
+        return `${column} = ${isNumeric ? value : `'${value}'`}`;
+      }
+    }
+
+    return null;
   }
 
   /**
