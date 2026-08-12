@@ -494,99 +494,240 @@ class SidebarProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>QueryPilot</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: var(--vscode-font-family);
             font-size: var(--vscode-font-size);
             color: var(--vscode-foreground);
-            background-color: var(--vscode-editor-background);
-            padding: 20px;
+            background-color: var(--vscode-sideBar-background);
             margin: 0;
+            padding: 16px;
+            line-height: 1.5;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
+            max-width: 100%;
         }
         h1 {
+            margin: 0 0 24px 0;
             color: var(--vscode-foreground);
-            border-bottom: 1px solid var(--vscode-panel-border);
-            padding-bottom: 10px;
+            font-size: 24px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        h1::before {
+            content: '🚀';
+            font-size: 28px;
         }
         h2 {
+            margin: 0 0 16px 0;
             color: var(--vscode-foreground);
-            margin-top: 30px;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--vscode-panel-border);
         }
         .section {
-            margin-bottom: 30px;
-            padding: 15px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: var(--vscode-editor-background);
             border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.2s ease;
+        }
+        .section:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             color: var(--vscode-foreground);
+            font-size: 13px;
+            font-weight: 500;
         }
         input, select, textarea {
             width: 100%;
-            padding: 8px;
-            margin-bottom: 10px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
-            box-sizing: border-box;
+            border-radius: 6px;
+            font-size: 13px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--vscode-focusBorder);
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+        }
+        input::placeholder, textarea::placeholder {
+            color: var(--vscode-input-placeholderForeground);
         }
         button {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            padding: 8px 16px;
+            padding: 10px 20px;
             cursor: pointer;
-            margin-right: 10px;
-            border-radius: 2px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
-        button:hover {
+        button:hover:not(:disabled) {
             background-color: var(--vscode-button-hoverBackground);
+            transform: translateY(-1px);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(0);
         }
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
+        }
+        button.primary {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        button.primary:hover:not(:disabled) {
+            background-color: var(--vscode-button-secondaryHoverBackground);
         }
         .status {
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status::before {
+            font-size: 16px;
         }
         .status.connected {
-            background-color: var(--vscode-testing-iconPassed);
-            color: var(--vscode-editor-background);
+            background-color: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+        .status.connected::before {
+            content: '✓';
         }
         .status.disconnected {
-            background-color: var(--vscode-testing-iconFailed);
-            color: var(--vscode-editor-background);
+            background-color: rgba(248, 113, 113, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+        .status.disconnected::before {
+            content: '✕';
         }
         .schema-tree {
-            font-family: monospace;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             white-space: pre;
             background-color: var(--vscode-editor-background);
-            padding: 10px;
+            padding: 16px;
             border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
         }
         .query-result {
             background-color: var(--vscode-editor-background);
-            padding: 10px;
+            padding: 16px;
             border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
+            border-radius: 6px;
             white-space: pre-wrap;
             word-wrap: break-word;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
         }
         .error {
             color: var(--vscode-errorForeground);
-            background-color: var(--vscode-editorErrorBackground);
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
+            background-color: rgba(248, 113, 113, 0.1);
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .error::before {
+            content: '⚠';
+            font-size: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+        th {
+            background-color: var(--vscode-editor-selectionBackground);
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+        tr:hover {
+            background-color: var(--vscode-editor-hoverHighlightBackground);
+        }
+        .confidence {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background-color: var(--vscode-editor-selectionBackground);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+        .confidence::before {
+            content: '📊';
+        }
+        .explanation {
+            margin-top: 12px;
+            padding: 12px;
+            background-color: var(--vscode-textBlockQuote-background);
+            border-left: 3px solid var(--vscode-textLink-foreground);
+            border-radius: 0 6px 6px 0;
+            font-size: 13px;
+            color: var(--vscode-foreground);
+        }
+        .explanation::before {
+            content: '💡 ';
+        }
+        .row-count {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+        .row-count::before {
+            content: '📈 ';
         }
     </style>
 </head>
@@ -597,7 +738,7 @@ class SidebarProvider {
         <div id="error-container"></div>
         
         <div class="section">
-            <h2>Database Connection</h2>
+            <h2>🔌 Database Connection</h2>
             <div id="connection-status" class="status disconnected">Not Connected</div>
             
             <label for="database-type">Database Type:</label>
@@ -623,18 +764,18 @@ class SidebarProvider {
             <label for="password">Password:</label>
             <input type="password" id="password" placeholder="password">
             
-            <button id="connect-btn">Connect</button>
+            <button id="connect-btn" class="primary">Connect</button>
             <button id="disconnect-btn" disabled>Disconnect</button>
         </div>
         
         <div class="section">
-            <h2>Schema</h2>
+            <h2>📊 Schema</h2>
             <button id="refresh-schema-btn" disabled>Refresh Schema</button>
             <div id="schema-display" class="schema-tree">No schema loaded</div>
         </div>
         
         <div class="section">
-            <h2>AI Configuration</h2>
+            <h2>🤖 AI Configuration</h2>
             <div id="ai-status" class="status disconnected">AI Not Configured</div>
             
             <label for="ai-provider">AI Provider:</label>
@@ -658,26 +799,26 @@ class SidebarProvider {
             <label for="ai-api-key">API Key:</label>
             <input type="password" id="ai-api-key" placeholder="Enter your API key">
             
-            <button id="configure-ai-btn">Configure AI</button>
+            <button id="configure-ai-btn" class="primary">Configure AI</button>
         </div>
         
         <div class="section">
-            <h2>Natural Language Query</h2>
+            <h2>💬 Natural Language Query</h2>
             <label for="user-prompt">Enter your request:</label>
             <textarea id="user-prompt" rows="3" placeholder="Show me all users who signed up last week"></textarea>
-            <button id="generate-query-btn" disabled>Generate Query</button>
+            <button id="generate-query-btn" class="primary" disabled>Generate Query</button>
         </div>
         
         <div class="section">
-            <h2>Generated SQL</h2>
+            <h2>📝 Generated SQL</h2>
             <div id="generated-query" class="query-result">No query generated</div>
             <button id="explain-query-btn" disabled>Explain</button>
             <button id="optimize-query-btn" disabled>Optimize</button>
-            <button id="run-query-btn" disabled>Run Query</button>
+            <button id="run-query-btn" class="primary" disabled>Run Query</button>
         </div>
         
         <div class="section">
-            <h2>Results</h2>
+            <h2>📈 Results</h2>
             <div id="query-results" class="query-result">No results</div>
         </div>
     </div>
@@ -793,33 +934,6 @@ class SidebarProvider {
             });
         }
         
-        function handleExplainQuery() {
-            if (currentQuery) {
-                vscode.postMessage({
-                    type: 'explainQuery',
-                    payload: { query: currentQuery }
-                });
-            }
-        }
-        
-        function handleOptimizeQuery() {
-            if (currentQuery) {
-                vscode.postMessage({
-                    type: 'optimizeQuery',
-                    payload: { query: currentQuery, useAnalyze: false }
-                });
-            }
-        }
-        
-        function handleRunQuery() {
-            if (currentQuery) {
-                vscode.postMessage({
-                    type: 'executeQuery',
-                    payload: { query: currentQuery }
-                });
-            }
-        }
-        
         function handleConfigureAI() {
             const provider = document.getElementById('ai-provider').value;
             const model = document.getElementById('ai-model').value;
@@ -874,7 +988,20 @@ class SidebarProvider {
         
         function handleQueryGenerated(payload) {
             currentQuery = payload.query;
-            generatedQueryDisplay.textContent = payload.query;
+            
+            let displayContent = payload.query;
+            
+            // Add confidence indicator
+            if (payload.confidence) {
+                displayContent += '<div class="confidence">Confidence: ' + Math.round(payload.confidence * 100) + '%</div>';
+            }
+            
+            // Add explanation if available
+            if (payload.explanation) {
+                displayContent += '<div class="explanation">' + payload.explanation + '</div>';
+            }
+            
+            generatedQueryDisplay.innerHTML = displayContent;
             explainQueryBtn.disabled = false;
             optimizeQueryBtn.disabled = false;
             runQueryBtn.disabled = false;
